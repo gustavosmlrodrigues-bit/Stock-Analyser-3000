@@ -57,10 +57,14 @@ npm start                # http://localhost:3000
 
 Os pedidos usam o *fallback* do lado do servidor da Anthropic (`fallbacks: "default"`): se o modelo principal recusar um pedido por um classificador de segurança, a API repete-o automaticamente noutro modelo e a app mostra isso no registo de progresso.
 
-### Tickers
-- EUA: `AAPL`, `MSFT`, `BRK-B`
-- Europa e Ásia (formato Yahoo): `ASML.AS`, `EDP.LS`, `SAP.DE`, `MC.PA`, `005930.KS`, `0700.HK`
-- Empresas fora da SEC não têm dados XBRL automáticos: o analista vai buscá-los aos reguladores locais e ao site de investidores (selo ✓ ou ⚠️ conforme a fonte).
+### Pesquisar qualquer ação
+Escreve o nome ou o ticker, mesmo com erros: `nvdia`, `microsft`, `jeronimo martins`, `galp`, `samsumg`, `ASML.AS`, `005930.KS`.
+1. Enquanto escreves aparecem sugestões (Yahoo Finance, que cobre as bolsas de todo o mundo, mais uma pesquisa aproximada na lista da SEC e numa lista de nomes europeus e asiáticos comuns).
+2. Ao analisar, a app escolhe a ação mais provável. Se houver dúvida real (ex.: `aple` pode ser a Apple ou a Apple Hospitality REIT, ticker APLE), pergunta "Querias dizer…?" em vez de adivinhar.
+3. Se nada for encontrado, o Claude sugere até 3 empresas para o nome mal escrito, e cada sugestão é confirmada no Yahoo Finance antes de ser usada.
+
+Um ticker em maiúsculas (`FORD`) é tratado como ticker; em minúsculas (`ford`) pode ser um nome, e o nome da empresa ganha.
+Empresas fora da SEC não têm dados XBRL automáticos: o analista vai buscá-los aos reguladores locais e ao site de investidores (selo ✓ ou ⚠️ conforme a fonte).
 
 ## Testes
 
@@ -80,6 +84,7 @@ lib/sec.js         SEC EDGAR: filings, Form 4, XBRL (anual, TTM)
 lib/news.js        Google News RSS, deteção de artigos pagos
 lib/macro.js       FRED (yields, Fed funds, desemprego, CPI, Brent), BCE
 lib/metrics.js     cálculos 🧮 e alertas forenses
+lib/resolve.js     nome ou ticker (com erros) → ação cotada
 lib/dossier.js     junta tudo e regista falhas
 lib/prompts.js     regras do analista (modos, fontes, forense, formato)
 lib/analyst.js     Claude + pesquisa web, streaming, pause_turn

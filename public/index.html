@@ -29,8 +29,13 @@
 
     <form id="form" class="card form" autocomplete="off">
       <div class="field ticker-field">
-        <label for="ticker" data-i18n="ticker">Ticker</label>
-        <input id="ticker" name="ticker" required maxlength="15" placeholder="AAPL, ASML, EDP.LS…" spellcheck="false" autocapitalize="characters">
+        <label for="query" data-i18n="ticker">Ação (nome ou ticker)</label>
+        <div class="combo">
+          <input id="query" name="query" required maxlength="80" placeholder="Apple, nvidia, EDP, ASML…" spellcheck="false" autocomplete="off"
+            role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="suggestions">
+          <input id="symbol" name="symbol" type="hidden">
+          <ul id="suggestions" class="suggestions" role="listbox" hidden></ul>
+        </div>
       </div>
 
       <fieldset class="field mode">
@@ -62,6 +67,8 @@
         <button id="cancel" type="button" class="ghost" hidden data-i18n="cancel">Cancelar</button>
       </div>
     </form>
+
+    <div id="choices" aria-live="polite"></div>
 
     <ul class="legend" aria-label="Selos">
       <li><span class="badge b-primary">✓</span> <span data-i18n="bPrimary">fonte primária</span></li>

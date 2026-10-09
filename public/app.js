@@ -81,8 +81,98 @@ $("form").addEventListener("submit", async (e) => {
 });
 $("cancel").addEventListener("click", () => state.controller?.abort());
 
+// ---------- search box with suggestions ----------
+const sugg = { items: [], active: -1, timer: null, seq: 0 };
+const qInput = $("query");
+
+function closeSuggestions() {
+  $("suggestions").hidden = true;
+  qInput.setAttribute("aria-expanded", "false");
+  sugg.active = -1;
+}
+
+function renderSuggestions() {
+  const ul = $("suggestions");
+  if (!sugg.items.length) return closeSuggestions();
+  ul.innerHTML = sugg.items
+    .map((c, i) => `<li role="option" id="sugg-${i}" aria-selected="${i === sugg.active}" data-i="${i}"><span class="s-name">${esc(c.name)}</span><span class="s-sym">${esc(c.symbol)}<span class="s-ex">${esc(c.exchange ?? "")}</span></span></li>`)
+    .join("");
+  ul.hidden = false;
+  qInput.setAttribute("aria-expanded", "true");
+  if (sugg.active >= 0) qInput.setAttribute("aria-activedescendant", `sugg-${sugg.active}`);
+  else qInput.removeAttribute("aria-activedescendant");
+}
+
+function pick(c) {
+  qInput.value = `${c.name} (${c.symbol})`;
+  $("symbol").value = c.symbol;
+  closeSuggestions();
+}
+
+qInput.addEventListener("input", () => {
+  $("symbol").value = ""; // typed again: the earlier pick no longer applies
+  clearTimeout(sugg.timer);
+  const q = qInput.value.trim();
+  if (q.length < 2) {
+    sugg.items = [];
+    return closeSuggestions();
+  }
+  sugg.timer = setTimeout(async () => {
+    const seq = ++sugg.seq;
+    try {
+      const r = await fetch(`/api/search?q=${encodeURIComponent(q)}`).then((x) => x.json());
+      if (seq !== sugg.seq) return; // a newer search is on its way
+      sugg.items = r.candidates ?? [];
+      sugg.active = -1;
+      renderSuggestions();
+    } catch {
+      closeSuggestions();
+    }
+  }, 250);
+});
+
+qInput.addEventListener("keydown", (e) => {
+  if ($("suggestions").hidden) return;
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+    e.preventDefault();
+    const n = sugg.items.length;
+    sugg.active = e.key === "ArrowDown" ? (sugg.active + 1) % n : (sugg.active - 1 + n) % n;
+    renderSuggestions();
+  } else if (e.key === "Enter" && sugg.active >= 0) {
+    e.preventDefault();
+    pick(sugg.items[sugg.active]);
+  } else if (e.key === "Escape") {
+    closeSuggestions();
+  }
+});
+qInput.addEventListener("blur", () => setTimeout(closeSuggestions, 150));
+$("suggestions").addEventListener("mousedown", (e) => {
+  const li = e.target.closest("li[data-i]");
+  if (!li) return;
+  e.preventDefault();
+  pick(sugg.items[Number(li.dataset.i)]);
+});
+
+function showChoices(data) {
+  const div = document.createElement("div");
+  div.className = "notice warn";
+  div.innerHTML = `<b>${esc(t("choose"))}</b><div class="choices">${data.candidates
+    .map((c, i) => `<button type="button" data-i="${i}">${esc(c.name)} — <b>${esc(c.symbol)}</b><small>${esc(c.exchange ?? "")}</small></button>`)
+    .join("")}</div>`;
+  div.addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-i]");
+    if (!b) return;
+    pick(data.candidates[Number(b.dataset.i)]);
+    $("form").requestSubmit();
+  });
+  $("choices").replaceChildren(div);
+  $("results").hidden = true;
+  div.querySelector("button")?.focus();
+}
+
 function resetUi() {
   Object.assign(state, { dossier: null, result: null, markdown: "", sources: 0 });
+  $("choices").replaceChildren();
   $("results").hidden = false;
   $("quote-card").innerHTML = "";
   for (const id of ["hold", "buy"]) {
@@ -128,8 +218,18 @@ async function analyze(body) {
     for await (const { event, data } of readSse(res.body)) {
       switch (event) {
         case "status":
-          log({ quote: t("stepQuote"), news: t("stepNews"), macro: t("stepMacro"), analysis: t("stepAnalysis") }[data.step] ?? data.step);
+          log({ resolve: t("stepResolve"), quote: t("stepQuote"), news: t("stepNews"), macro: t("stepMacro"), analysis: t("stepAnalysis") }[data.step] ?? data.step);
           thinkingLi = null;
+          break;
+        case "resolved":
+          log(`✓ ${t("resolvedAs")}: “${data.query}” → ${data.name} (${data.symbol})${data.exchange ? ` · ${data.exchange}` : ""} ${data.method === "ai" ? t("resolvedAi") : ""}`);
+          break;
+        case "choose":
+          showChoices(data);
+          break;
+        case "notfound":
+          $("results").hidden = true;
+          $("choices").innerHTML = `<div class="notice err">${esc(t("notFound"))}</div>`;
           break;
         case "dossier":
           state.dossier = data;

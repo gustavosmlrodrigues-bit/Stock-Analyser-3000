@@ -86,17 +86,20 @@ test("prompts: system prompt is stable; user prompt carries date, mode, language
 });
 
 test("parseAnalyzeRequest validates input", () => {
-  assert.deepEqual(parseAnalyzeRequest({ ticker: " aapl ", mode: "deep", brokerPrice: "123,45", amountEur: "" }), {
-    ticker: "AAPL",
+  assert.deepEqual(parseAnalyzeRequest({ query: "  jeronimo   martins ", mode: "deep", brokerPrice: "123,45", amountEur: "" }), {
+    symbol: null,
+    query: "jeronimo martins",
     mode: "deep",
     lang: "pt",
     brokerPrice: 123.45,
     brokerCurrency: "EUR",
     amountEur: null,
   });
-  assert.equal(parseAnalyzeRequest({ ticker: "<script>" }).error, "invalid_ticker");
-  assert.equal(parseAnalyzeRequest({ ticker: "AAPL", brokerPrice: "-3" }).error, "invalid_number");
-  assert.equal(parseAnalyzeRequest({ ticker: "EDP.LS", mode: "x", lang: "en" }).mode, "quick");
+  assert.equal(parseAnalyzeRequest({ query: "x", symbol: "edp.ls" }).symbol, "EDP.LS");
+  assert.equal(parseAnalyzeRequest({ symbol: "<script>" }).error, "invalid_ticker");
+  assert.equal(parseAnalyzeRequest({ query: "" }).error, "invalid_query");
+  assert.equal(parseAnalyzeRequest({ query: "AAPL", brokerPrice: "-3" }).error, "invalid_number");
+  assert.equal(parseAnalyzeRequest({ ticker: "EDP.LS", mode: "x", lang: "en" }).query, "EDP.LS");
 });
 
 test("renderMarkdown escapes HTML and only links http(s)", () => {

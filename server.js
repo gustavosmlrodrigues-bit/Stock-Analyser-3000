@@ -6,6 +6,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { buildDossier } from "./lib/dossier.js";
 import { runAnalysis, MODEL } from "./lib/analyst.js";
 import { getQuote, getEurRate, toEur } from "./lib/market.js";
+import { resolveQuery } from "./lib/resolve.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC = path.join(here, "public");
@@ -30,8 +31,11 @@ async function readBody(req, limit = 10_000) {
 
 /** Validate an analysis request. Exported for tests. */
 export function parseAnalyzeRequest(body) {
-  const ticker = String(body.ticker ?? "").trim().toUpperCase();
-  if (!TICKER_RE.test(ticker)) return { error: "invalid_ticker" };
+  // `symbol` is an exact listing picked from the suggestions; `query` is whatever the user typed.
+  const symbol = String(body.symbol ?? "").trim().toUpperCase();
+  const query = String(body.query ?? body.ticker ?? "").trim().replace(/\s+/g, " ");
+  if (symbol && !TICKER_RE.test(symbol)) return { error: "invalid_ticker" };
+  if (!symbol && (query.length < 1 || query.length > 80)) return { error: "invalid_query" };
   const mode = body.mode === "deep" ? "deep" : "quick";
   const lang = body.lang === "en" ? "en" : "pt";
   const num = (x) => {
@@ -43,7 +47,7 @@ export function parseAnalyzeRequest(body) {
   const amountEur = num(body.amountEur);
   if (Number.isNaN(brokerPrice) || Number.isNaN(amountEur)) return { error: "invalid_number" };
   const brokerCurrency = body.brokerCurrency === "LOCAL" ? "LOCAL" : "EUR";
-  return { ticker, mode, lang, brokerPrice, brokerCurrency, amountEur };
+  return { symbol: symbol || null, query, mode, lang, brokerPrice, brokerCurrency, amountEur };
 }
 
 async function handleAnalyze(req, res) {
@@ -64,7 +68,16 @@ async function handleAnalyze(req, res) {
   const heartbeat = setInterval(() => emit("ping", {}), 15000);
 
   try {
-    const dossier = await buildDossier(params, (s) => emit("status", s));
+    let ticker = params.symbol;
+    if (!ticker) {
+      emit("status", { step: "resolve" });
+      const r = await resolveQuery(params.query);
+      if (!r.best) return emit("notfound", { query: r.query, errors: r.errors });
+      if (!r.confident) return emit("choose", { query: r.query, candidates: r.candidates });
+      ticker = r.best.symbol;
+      emit("resolved", { query: r.query, ...r.best, method: r.method });
+    }
+    const dossier = await buildDossier({ ...params, ticker }, (s) => emit("status", s));
     emit("dossier", dossier);
     if (controller.signal.aborted) return;
     emit("status", { step: "analysis" });
@@ -88,6 +101,14 @@ function describeError(err) {
   if (err instanceof Anthropic.AnthropicError) return { code: "auth", message: "Credenciais da Anthropic em falta: define ANTHROPIC_API_KEY no ficheiro .env." };
   console.error(err);
   return { code: "internal", message: err.message };
+}
+
+async function handleSearch(url, res) {
+  const q = (url.searchParams.get("q") ?? "").trim();
+  if (q.length < 2 || q.length > 80) return sendJson(res, 200, { candidates: [] });
+  // The suggestions box never calls Claude: only Yahoo search and the local fuzzy match.
+  const r = await resolveQuery(q, { allowAi: false });
+  sendJson(res, 200, { candidates: r.candidates, confident: r.confident });
 }
 
 async function handleQuote(url, res) {
@@ -123,6 +144,7 @@ export const server = http.createServer(async (req, res) => {
   try {
     if (req.method === "POST" && url.pathname === "/api/analyze") return await handleAnalyze(req, res);
     if (req.method === "GET" && url.pathname === "/api/quote") return await handleQuote(url, res);
+    if (req.method === "GET" && url.pathname === "/api/search") return await handleSearch(url, res);
     if (req.method === "GET" && url.pathname === "/api/health")
       return sendJson(res, 200, { ok: true, model: MODEL, anthropicKey: !!(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN), secUserAgent: !!process.env.SEC_USER_AGENT });
     if (req.method === "GET") return await serveStatic(url.pathname, res);
