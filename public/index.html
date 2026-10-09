@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="pt-PT">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Analista de Ações</title>
+  <meta name="description" content="Analista de ações em tempo real: valor, análise forense e research, sempre com pesquisa nova.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%23165d4a'/><path d='M6 22l6-7 5 4 9-11' stroke='white' stroke-width='3' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="wrap topbar-inner">
+      <div class="brand">
+        <svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7"/><path d="M6 22l6-7 5 4 9-11"/></svg>
+        <span data-i18n="title">Analista de Ações</span>
+      </div>
+      <div class="lang" role="group" aria-label="Idioma / Language">
+        <button type="button" data-lang="pt" aria-pressed="true">PT</button>
+        <button type="button" data-lang="en" aria-pressed="false">EN</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <p class="tagline" data-i18n="tagline">Valor (Buffett) + análise forense + research profissional. Cada pedido faz pesquisa nova, no momento.</p>
+
+    <div id="setup-warning" class="notice warn" hidden></div>
+
+    <form id="form" class="card form" autocomplete="off">
+      <div class="field ticker-field">
+        <label for="ticker" data-i18n="ticker">Ticker</label>
+        <input id="ticker" name="ticker" required maxlength="15" placeholder="AAPL, ASML, EDP.LS…" spellcheck="false" autocapitalize="characters">
+      </div>
+
+      <fieldset class="field mode">
+        <legend data-i18n="mode">Modo</legend>
+        <div class="segmented">
+          <label><input type="radio" name="mode" value="quick" checked><span><b data-i18n="quick">⚡ Rápido</b><small data-i18n="quickHint">1-2 minutos</small></span></label>
+          <label><input type="radio" name="mode" value="deep"><span><b data-i18n="deep">🔬 Profundo</b><small data-i18n="deepHint">estudo completo</small></span></label>
+        </div>
+      </fieldset>
+
+      <div class="field">
+        <label for="brokerPrice" data-i18n="brokerPrice">Preço na corretora (opcional)</label>
+        <div class="inline">
+          <input id="brokerPrice" name="brokerPrice" inputmode="decimal" placeholder="—">
+          <select id="brokerCurrency" name="brokerCurrency" aria-label="Moeda">
+            <option value="EUR">EUR</option>
+            <option value="LOCAL" data-i18n="localCcy">moeda local</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="amountEur" data-i18n="amount">Montante disponível € (opcional)</label>
+        <input id="amountEur" name="amountEur" inputmode="decimal" placeholder="—">
+      </div>
+
+      <div class="actions">
+        <button id="submit" type="submit" class="primary" data-i18n="analyze">Analisar</button>
+        <button id="cancel" type="button" class="ghost" hidden data-i18n="cancel">Cancelar</button>
+      </div>
+    </form>
+
+    <ul class="legend" aria-label="Selos">
+      <li><span class="badge b-primary">✓</span> <span data-i18n="bPrimary">fonte primária</span></li>
+      <li><span class="badge b-aggregator">≈</span> <span data-i18n="bAggregator">agregador</span></li>
+      <li><span class="badge b-calc">🧮</span> <span data-i18n="bCalc">cálculo da app (fórmula visível)</span></li>
+      <li><span class="badge b-unverified">⚠️</span> <span data-i18n="bUnverified">não verificado</span></li>
+    </ul>
+
+    <section id="results" hidden>
+      <div class="grid top">
+        <article class="card quote" id="quote-card"></article>
+        <article class="card scores" id="scores-card">
+          <h2 data-i18n="scores">Notas</h2>
+          <div class="score-row"><span data-i18n="hold">Manter</span><div class="meter"><i id="hold-bar"></i></div><b id="hold-val">—</b></div>
+          <div class="score-row"><span data-i18n="buy">Comprar agora</span><div class="meter"><i id="buy-bar"></i></div><b id="buy-val">—</b></div>
+          <ol id="verdict" class="verdict"></ol>
+          <p id="action" class="action" hidden></p>
+          <p id="earnings" class="muted small"></p>
+        </article>
+      </div>
+
+      <details class="card progress" id="progress" open>
+        <summary><span id="progress-title" data-i18n="working">A pesquisar…</span> <span id="progress-count" class="muted"></span></summary>
+        <ol id="log" class="log"></ol>
+      </details>
+
+      <div id="alerts"></div>
+
+      <article class="card report">
+        <div id="report" class="md"><p class="muted" data-i18n="waiting">O relatório aparece aqui à medida que é escrito.</p></div>
+      </article>
+
+      <details class="card">
+        <summary data-i18n="data">Dados recolhidos agora (com proveniência)</summary>
+        <div id="facts" class="table-wrap"></div>
+      </details>
+
+      <details class="card">
+        <summary data-i18n="filings">Documentos SEC recentes</summary>
+        <div id="filings"></div>
+      </details>
+
+      <details class="card">
+        <summary data-i18n="news">Notícias (Google News RSS)</summary>
+        <div id="news"></div>
+      </details>
+
+      <details class="card">
+        <summary data-i18n="sources">Fontes consultadas pelo analista</summary>
+        <div id="sources"></div>
+      </details>
+
+      <div id="errors"></div>
+    </section>
+  </main>
+
+  <footer class="wrap footer">
+    <p data-i18n="disclaimer">Ferramenta de apoio à decisão, não é aconselhamento financeiro. Confirma sempre os números nas fontes indicadas antes de investir.</p>
+  </footer>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

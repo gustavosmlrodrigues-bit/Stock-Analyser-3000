@@ -1,0 +1,18 @@
+{
+  "name": "stock-analyser-3000",
+  "version": "0.1.0",
+  "description": "Analista de ações em tempo real (PT/EN) — valor, forense e research, sempre com pesquisa nova.",
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=22.9"
+  },
+  "scripts": {
+    "start": "node --env-file-if-exists=.env server.js",
+    "dev": "node --env-file-if-exists=.env --watch server.js",
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.133.0"
+  }
+}
