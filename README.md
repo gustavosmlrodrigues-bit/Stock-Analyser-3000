@@ -36,6 +36,14 @@ browser ──POST /api/analyze──► servidor Node
 - **⚡ Rápido** (1-2 min): preço, porque mexeu hoje (2 fontes), P/E contabilístico e ajustado, FCF/EV, dívida líquida, alvo dos analistas, próximos resultados, notas, veredicto em 5 linhas e uma ação concreta em euros.
 - **🔬 Profundo**: as 17 secções (negócio, histórico 5-10 anos, resultados e guidance, forense, gestão, uso do dinheiro, valuation com concorrentes + DCF 3 cenários + DCF inverso, macro, política, disrupção, ciclo, mercado, árvore de cenários, pré-mortem, advogado do diabo, calendário, veredicto e plano).
 
+### 🌍 Screener de mercado
+Separador "Screener de mercado": escreves uma tese (ex.: *"acho que o petróleo vai descer"*), a nota mínima (por omissão **Comprar agora ≥ 8,5**), o mercado (Mundo / EUA / Europa) e quantos candidatos avaliar.
+1. **Fase 1** — o analista verifica a tese com dados de hoje (é consenso? já está no preço?), faz o mapa de quem ganha / resiste / perde e propõe candidatos de vários sectores (e uma lista "a evitar").
+2. **Dados** — a app recolhe dados frescos de cada candidato (cotação, SEC, cálculos 🧮, alertas forenses). Um ticker sem cotação ao vivo é excluído, nunca adivinhado.
+3. **Fase 2** — o analista dá as notas Manter / Comprar agora com a mesma calibração da análise individual (≥ 8 exige margem de segurança clara) e a tese entra como cenário ponderado, não como certeza.
+
+A app ordena e filtra pela nota pedida. Se nenhuma passar, di-lo e mostra as mais próximas e a que preço passariam. Clicar num ticker abre a análise completa dessa ação. Demora vários minutos e faz bastantes pesquisas (custo de API maior do que uma análise rápida).
+
 As regras completas que o analista segue estão em `lib/prompts.js`.
 
 ## Instalação
@@ -88,6 +96,7 @@ lib/resolve.js     nome ou ticker (com erros) → ação cotada
 lib/dossier.js     junta tudo e regista falhas
 lib/prompts.js     regras do analista (modos, fontes, forense, formato)
 lib/analyst.js     Claude + pesquisa web, streaming, pause_turn
+lib/screener.js    screener de mercado: tese → candidatos → dados frescos → notas e filtro
 public/            interface (PT/EN, modo claro/escuro, mobile)
 ```
 

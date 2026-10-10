@@ -7,6 +7,7 @@ import { buildDossier } from "./lib/dossier.js";
 import { runAnalysis, MODEL } from "./lib/analyst.js";
 import { getQuote, getEurRate, toEur } from "./lib/market.js";
 import { resolveQuery } from "./lib/resolve.js";
+import { parseScreenRequest, runScreen } from "./lib/screener.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC = path.join(here, "public");
@@ -59,14 +60,7 @@ async function handleAnalyze(req, res) {
   }
   if (params.error) return sendJson(res, 400, params);
 
-  res.writeHead(200, { "Content-Type": "text/event-stream; charset=utf-8", "Cache-Control": "no-store", Connection: "keep-alive", "X-Accel-Buffering": "no" });
-  const controller = new AbortController();
-  res.on("close", () => controller.abort());
-  const emit = (event, data) => {
-    if (!res.writableEnded) res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
-  };
-  const heartbeat = setInterval(() => emit("ping", {}), 15000);
-
+  const { controller, emit, heartbeat } = openSse(res);
   try {
     let ticker = params.symbol;
     if (!ticker) {
@@ -92,8 +86,43 @@ async function handleAnalyze(req, res) {
   }
 }
 
+/** Start a server-sent events stream; the request is aborted when the browser goes away. */
+function openSse(res) {
+  res.writeHead(200, { "Content-Type": "text/event-stream; charset=utf-8", "Cache-Control": "no-store", Connection: "keep-alive", "X-Accel-Buffering": "no" });
+  const controller = new AbortController();
+  res.on("close", () => controller.abort());
+  const emit = (event, data) => {
+    if (!res.writableEnded) res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  };
+  const heartbeat = setInterval(() => emit("ping", {}), 15000);
+  return { controller, emit, heartbeat };
+}
+
+async function handleScreen(req, res) {
+  let params;
+  try {
+    params = parseScreenRequest(await readBody(req));
+  } catch {
+    return sendJson(res, 400, { error: "invalid_json" });
+  }
+  if (params.error) return sendJson(res, 400, params);
+
+  const { controller, emit, heartbeat } = openSse(res);
+  try {
+    const result = await runScreen(params, emit, controller.signal);
+    if (result) emit("done", result);
+  } catch (err) {
+    if (controller.signal.aborted) return;
+    emit("error", describeError(err));
+  } finally {
+    clearInterval(heartbeat);
+    res.end();
+  }
+}
+
 function describeError(err) {
   if (err.code === "refusal") return { code: "refusal", message: err.message, details: err.details };
+  if (err.code === "no_candidates" || err.code === "no_data") return { code: err.code, message: err.message };
   if (err instanceof Anthropic.AuthenticationError) return { code: "auth", message: "Chave da API da Anthropic inválida ou em falta (ANTHROPIC_API_KEY)." };
   if (err instanceof Anthropic.RateLimitError) return { code: "rate_limit", message: "Limite de pedidos atingido. Tenta daqui a um minuto." };
   if (err instanceof Anthropic.APIConnectionError) return { code: "connection", message: "Sem ligação à API da Anthropic." };
@@ -143,6 +172,7 @@ export const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, "http://localhost");
   try {
     if (req.method === "POST" && url.pathname === "/api/analyze") return await handleAnalyze(req, res);
+    if (req.method === "POST" && url.pathname === "/api/screen") return await handleScreen(req, res);
     if (req.method === "GET" && url.pathname === "/api/quote") return await handleQuote(url, res);
     if (req.method === "GET" && url.pathname === "/api/search") return await handleSearch(url, res);
     if (req.method === "GET" && url.pathname === "/api/health")

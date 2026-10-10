@@ -40,9 +40,11 @@ function applyLang() {
   document.documentElement.lang = lang === "en" ? "en" : "pt-PT";
   document.title = t("title");
   for (const el of document.querySelectorAll("[data-i18n]")) el.textContent = t(el.dataset.i18n);
+  for (const el of document.querySelectorAll("[data-i18n-placeholder]")) el.placeholder = t(el.dataset.i18nPlaceholder);
   for (const b of document.querySelectorAll("[data-lang]")) b.setAttribute("aria-pressed", String(b.dataset.lang === lang));
   if (state.dossier) renderDossier(state.dossier);
   if (state.result) renderResult(state.result);
+  if (screen.result) renderScreenResult(screen.result);
 }
 for (const b of document.querySelectorAll("[data-lang]")) {
   b.addEventListener("click", () => {
@@ -192,12 +194,12 @@ function resetUi() {
   $("progress-title").textContent = t("working");
 }
 
-function log(text, cls = "") {
+function log(text, cls = "", listId = "log") {
   const li = document.createElement("li");
   li.textContent = text;
   if (cls) li.className = cls;
-  $("log").append(li);
-  $("log").scrollTop = $("log").scrollHeight;
+  $(listId).append(li);
+  $(listId).scrollTop = $(listId).scrollHeight;
   return li;
 }
 
@@ -428,6 +430,189 @@ function renderResult(r) {
   $("sources").innerHTML = all.size
     ? `<ul class="list">${[...all.values()].map((c) => `<li><a href="${esc(c.url)}" target="_blank" rel="noopener noreferrer">${esc(c.title || c.url)}</a>${c.pageAge ? `<div class="meta">${esc(c.pageAge)}</div>` : ""}</li>`).join("")}</ul>`
     : `<p class="muted">${esc(t("noSources"))}</p>`;
+}
+
+// ---------- tabs ----------
+function showTab(name) {
+  for (const n of ["analyze", "screen"]) {
+    $(`tab-${n}`).setAttribute("aria-selected", String(n === name));
+    $(`view-${n}`).hidden = n !== name;
+  }
+}
+$("tab-analyze").addEventListener("click", () => showTab("analyze"));
+$("tab-screen").addEventListener("click", () => showTab("screen"));
+
+// ---------- market screener ----------
+const screen = { result: null, parts: [], markdown: "", controller: null, renderPending: false };
+
+$("screen-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const body = Object.fromEntries(new FormData(e.target).entries());
+  body.lang = lang;
+  await runScreenUi(body);
+});
+$("screen-cancel").addEventListener("click", () => screen.controller?.abort());
+
+// A row's ticker opens the full single-stock analysis.
+$("screen-table").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-symbol]");
+  if (!b) return;
+  showTab("analyze");
+  qInput.value = `${b.dataset.name} (${b.dataset.symbol})`;
+  $("symbol").value = b.dataset.symbol;
+  $("form").requestSubmit();
+});
+
+function resetScreenUi() {
+  Object.assign(screen, { result: null, parts: [], markdown: "" });
+  $("screen-results").hidden = false;
+  $("screen-thesis").innerHTML = "";
+  $("screen-table").innerHTML = `<p class="muted">${esc(t("screenWaiting"))}</p>`;
+  $("screen-avoid").innerHTML = "";
+  $("screen-log").innerHTML = "";
+  $("screen-progress-count").textContent = "";
+  $("screen-report").innerHTML = `<p class="muted">${esc(t("waiting"))}</p>`;
+  $("screen-sources").innerHTML = "";
+  $("screen-errors").innerHTML = "";
+  $("screen-progress").open = true;
+  $("screen-progress").classList.add("running");
+  $("screen-progress-title").textContent = t("working");
+}
+
+async function runScreenUi(body) {
+  resetScreenUi();
+  $("screen-submit").disabled = true;
+  $("screen-cancel").hidden = false;
+  const controller = new AbortController();
+  screen.controller = controller;
+  const slog = (text, cls) => log(text, cls, "screen-log");
+  let thinkingLi = null;
+
+  try {
+    const res = await fetch("/api/screen", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal: controller.signal });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(t(err.error) || `HTTP ${res.status}`);
+    }
+    for await (const { event, data } of readSse(res.body)) {
+      switch (event) {
+        case "status":
+          slog({ screenCandidates: t("stepScreenCandidates"), screenData: t("stepScreenData"), screenScoring: t("stepScreenScoring") }[data.step] ?? data.step);
+          thinkingLi = null;
+          break;
+        case "candidates":
+          renderThesis(data.thesis);
+          slog(`✓ ${data.candidates.length} ${t("candidatesFound")}: ${data.candidates.map((c) => c.symbol).join(", ")}`);
+          break;
+        case "checked":
+          slog(`${data.ok ? "✓" : "✗"} ${data.symbol} — ${t(data.ok ? "checkedOk" : "checkedFail")}`);
+          break;
+        case "thinking":
+          if (!thinkingLi) thinkingLi = slog("", "thinking");
+          thinkingLi.textContent += data.text;
+          break;
+        case "search":
+          slog(`${t("searching")}: ${data.query ?? ""}`);
+          thinkingLi = null;
+          break;
+        case "fetch":
+          slog(`${t("reading")}: ${data.query ?? ""}`);
+          thinkingLi = null;
+          break;
+        case "sources":
+          $("screen-progress-count").textContent = `· ${data.count} ${t("sourcesCount")}`;
+          break;
+        case "fallback":
+          slog(`${t("fallback")}: ${data.to ?? ""}`);
+          break;
+        case "text":
+          screen.markdown += data.text;
+          scheduleScreenRender();
+          break;
+        case "stage":
+          // A finished stage replaces its streamed text (without the JSON block).
+          screen.parts.push(data.body);
+          screen.markdown = "";
+          scheduleScreenRender();
+          break;
+        case "done":
+          screen.result = data;
+          renderScreenResult(data);
+          break;
+        case "error":
+          showScreenError(data.message);
+          break;
+      }
+    }
+  } catch (err) {
+    if (err.name !== "AbortError") showScreenError(err.message);
+  } finally {
+    $("screen-submit").disabled = false;
+    $("screen-cancel").hidden = true;
+    $("screen-progress").classList.remove("running");
+    $("screen-progress-title").textContent = t("finished");
+    screen.controller = null;
+  }
+}
+
+function scheduleScreenRender() {
+  if (screen.renderPending) return;
+  screen.renderPending = true;
+  requestAnimationFrame(() => {
+    screen.renderPending = false;
+    const live = screen.markdown.replace(/```json[\s\S]*$/, "");
+    $("screen-report").innerHTML = renderMarkdown([...screen.parts, live].filter(Boolean).join("\n\n---\n\n"));
+  });
+}
+
+function showScreenError(message) {
+  const div = document.createElement("div");
+  div.className = "notice err";
+  div.textContent = message;
+  $("screen-errors").prepend(div);
+}
+
+function renderThesis(th) {
+  $("screen-thesis").innerHTML = th
+    ? `<div class="notice warn"><b>${esc(t("thesisView"))}:</b> ${esc(th.view ?? "")}${th.evidence ? `<div class="small">${esc(th.evidence)}</div>` : ""}</div>`
+    : "";
+}
+
+function renderScreenResult(r) {
+  renderThesis(r.thesis);
+  const key = r.params.scoreKey;
+  const keyLabel = t(key);
+  const minLabel = num(r.params.minScore, r.params.minScore % 1 ? 1 : 0);
+  const score = (v) => (v == null ? "—" : num(v, v % 1 ? 1 : 0));
+  const head = !r.scored
+    ? `<p class="notice warn">${esc(t("noScores"))}</p>`
+    : `<p class="screen-count"><b>${esc(t("passCount")(r.passing, r.results.length, keyLabel, minLabel))}</b></p>${r.passing ? "" : `<p class="notice warn">${esc(t("nonePass"))}</p>`}`;
+  const rows = r.results
+    .map(
+      (x) => `<tr class="${x.passes ? "pass" : "fail"}">
+        <td><button type="button" class="sym" data-symbol="${esc(x.symbol)}" data-name="${esc(x.name)}" title="${esc(t("openAnalysis"))}">${esc(x.symbol)}</button><div class="small">${esc(x.name)}${x.sector ? ` · ${esc(x.sector)}` : ""}</div></td>
+        <td class="num">${x.price?.value != null ? `${num(x.price.value)} ${esc(x.price.currency ?? "")}` : "—"}</td>
+        <td class="score${key === "buy" ? " key" : ""}">${score(x.buy)}</td>
+        <td class="score${key === "hold" ? " key" : ""}">${score(x.hold)}</td>
+        <td class="score">${score(x.thesisFit)}</td>
+        <td class="small">${esc(x.why ?? "")}${x.risk ? `<div class="formula">${esc(t("risk"))}: ${esc(x.risk)}</div>` : ""}${!x.passes && x.passPrice ? `<div class="formula">${esc(t("passPrice"))}: ${esc(x.passPrice)}</div>` : ""}</td>
+      </tr>`,
+    )
+    .join("");
+  $("screen-table").innerHTML = `${head}<table class="screen-table"><thead><tr><th>${esc(t("stock"))}</th><th>${esc(t("price"))}</th><th>${esc(t("buy"))}</th><th>${esc(t("hold"))}</th><th>${esc(t("fit"))}</th><th>${esc(t("why"))}</th></tr></thead><tbody>${rows}</tbody></table>`;
+  $("screen-avoid").innerHTML = r.avoid?.length
+    ? `<h3 class="small">${esc(t("avoid"))}</h3><ul class="list">${r.avoid.map((a) => `<li><b>${esc(a.symbol ?? "")}</b> ${esc(a.name ?? "")}<div class="meta">${esc(a.why ?? "")}</div></li>`).join("")}</ul>`
+    : "";
+  if (r.truncated) $("screen-report").insertAdjacentHTML("beforeend", `<p class="notice warn">${esc(t("truncated"))}</p>`);
+  const all = new Map();
+  for (const c of [...(r.citations ?? []), ...(r.consulted ?? [])]) if (c.url && !all.has(c.url)) all.set(c.url, c);
+  $("screen-sources").innerHTML = all.size
+    ? `<ul class="list">${[...all.values()].map((c) => `<li><a href="${esc(c.url)}" target="_blank" rel="noopener noreferrer">${esc(c.title || c.url)}</a>${c.pageAge ? `<div class="meta">${esc(c.pageAge)}</div>` : ""}</li>`).join("")}</ul>`
+    : `<p class="muted">${esc(t("noSources"))}</p>`;
+  $("screen-errors").querySelector(".source-errors")?.remove();
+  if (r.errors?.length) {
+    $("screen-errors").insertAdjacentHTML("beforeend", `<div class="source-errors"><div class="notice warn"><b>${esc(t("sourceErrors"))}</b><ul>${r.errors.map((x) => `<li>${esc(x.source)}: ${esc(x.message)}</li>`).join("")}</ul></div></div>`);
+  }
 }
 
 applyLang();
