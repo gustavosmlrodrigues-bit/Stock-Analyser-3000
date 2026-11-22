@@ -1,0 +1,14 @@
+ticker,empresa,categoria,nota_recalculada,preco,data_preco,moeda,zona_normal,zona_forte,zona_excelente,proximos_resultados,estado
+ARGX,argenx SE (ADR),growth,7.75,942.04,2026-11-19,USD,<=1000,<=800,<=665,~fev 2027 (estimativa),NAO VERIFICADO
+SAN,Sanofi,dividend,7.55,84.92,2026-11-20,EUR,<=88 EUR,<=78 EUR,<=70 EUR,"FY2026 ~finais jan/início fev 2027 (estimativa, data não confirmada) - OK",NAO VERIFICADO
+NU,Nu Holdings,growth,7.5,11.82,2026-11-19,USD,<=12.5,<=10.5,<=9,~fev 2027 (estimativa; Benzinga mostra 24-nov: verificar),NAO VERIFICADO
+ADBE,Adobe Inc.,value,7.5,217.71,2026-11-20,USD,<=220,<=185,<=155,"~meados dez 2026 (T4 FY26; estimativa, fora da janela)",NAO VERIFICADO
+NFLX,Netflix,quedas,7.35,56.73,2026-11-20,USD,61,51,43,~2027-01-20 (estimativa),NAO VERIFICADO
+TTE,TotalEnergies,dividend,7.3,78.19,2026-11-20,EUR,<=80 EUR,<=72 EUR,<=64 EUR,Q4/FY2026 ~início fev 2027 (estimativa) - OK,NAO VERIFICADO
+SE,Sea Limited,growth,7.25,71.63,2026-11-17,USD,<=75,<=60,<=48,~mar 2027 (estimativa),NAO VERIFICADO
+CVX,Chevron,dividend,7.25,208.37,2026-11-20,USD,<=205 USD,<=180 USD,<=160 USD,"Q4 2026 ~30 jan 2027 (estimativa, ano anterior 30-jan) - OK",NAO VERIFICADO
+PYPL,PayPal Holdings,value,6.8,53.29,2026-11-20,USD,<=49,<=42,<=36,~fim jan/fev 2027 (estimativa),NAO VERIFICADO
+UNH,UnitedHealth Group,quedas,6.58,339.85,2026-11-20,USD,326,268,230,~2027-01-13 (estimativa),NAO VERIFICADO
+META,Meta Platforms,growth,6.55,560.84,2026-11-20,USD,,,,~jan 2027 (estimativa),NAO VERIFICADO
+HCA,HCA Healthcare,value,6.05,475.57,2026-11-20,USD,<=410,<=365,<=320,~fim jan 2027 (estimativa),NAO VERIFICADO
+NKE,NIKE,quedas,5.6,32.92,2026-11-20,USD,30.6,25.2,21.6,~2026-12-17 (estimativa; >10 dias),NAO VERIFICADO
